@@ -78,7 +78,7 @@ colSums(is.na(anagrafica_unique))
 
 Tra le variabili territoriali (Provincia, SiglaProvincia, Comune e Regione) vogliamo mantenere
 soltanto la variabile Regione poiché:
-* le variabile prese in considerazione hanno una struttura gerarchica quindi ci restituiscono informazioni ridondanti; 
+* le variabile prese in considerazione hanno una struttura gerarchica quindi ci restituiscono informazioni in parte ridondanti; 
 * numerosità delle categorie (ci sono 20 regioni contro più di 100 province e più di 7000 comuni);
 * presenza di pochi valori nulli.
 
