@@ -1,0 +1,174 @@
+---
+title: "progetto fater"
+output: html_document
+date: "2023-01-27"
+---
+# Pre-processing dei dati
+
+Iniziamo con il caricamento dei dataset
+```{r}
+conversione_ean_prodotto <- read.csv("conversione_ean_prodotto.csv", na.strings = c("", "NA"))
+prodotti_caricati <- read.csv("prodotti_caricati.csv", na.strings = c("", "NA"))
+accessi_app <- read.csv("accessi_app.csv", na.strings = c("", "NA"))
+missioni_players <- read.csv("missioni_players.csv", na.strings = c("", "NA"))
+premi_mamme <- read.csv("premi_mamme.csv", na.strings = c("", "NA"))
+anagrafica <- read.csv("anagrafica.csv", na.strings = c("", "NA"))
+```
+
+Eseguiamo l'eliminazione delle righe duplicate su ogni dataset
+```{r}
+conversione_ean_prodotto_unique <- unique(conversione_ean_prodotto)
+prodotti_caricati_unique <- unique(prodotti_caricati)
+accessi_app_unique <- unique(accessi_app)
+missioni_players_unique <- unique(missioni_players)
+premi_mamme_unique <- unique(premi_mamme)
+anagrafica_unique <- unique(anagrafica)
+```
+
+Confrontiamo la lunghezza originale e quella senza righe duplicate per ogni dataset
+```{r}
+original_length1 <- nrow(conversione_ean_prodotto)
+new_length1 <- nrow(conversione_ean_prodotto_unique)
+if(original_length1 > new_length1) {
+  print(paste("Il dataset conversione_ean_prodotto aveva", original_length1 - new_length1, "righe duplicate"))
+}
+original_length2 <- nrow(prodotti_caricati)
+new_length2 <- nrow(prodotti_caricati_unique)
+if(original_length2 > new_length2) {
+  print(paste("Il dataset prodotti_caricati aveva", original_length2 - new_length2, "righe duplicate"))
+}
+
+original_length3 <- nrow(accessi_app)
+new_length3 <- nrow(accessi_app_unique)
+if(original_length3 > new_length3) {
+  print(paste("Il dataset accessi_app aveva", original_length3 - new_length3, "righe duplicate"))
+}
+
+original_length4 <- nrow(missioni_players)
+new_length4 <- nrow(missioni_players_unique)
+if(original_length4 > new_length4) {
+  print(paste("Il dataset missioni_players aveva", original_length4 - new_length4, "righe duplicate"))
+}
+
+original_length5 <- nrow(premi_mamme)
+new_length5 <- nrow(premi_mamme_unique)
+if(original_length5 > new_length5) {
+  print(paste("Il dataset premi_mamme aveva", original_length5 - new_length5, "righe duplicate"))
+}
+original_length6 <- nrow(anagrafica)
+new_length6 <- nrow(anagrafica_unique)
+if(original_length6 > new_length6) {
+  print(paste("Il dataset anagrafica aveva", originale - new_length6, "righe duplicate"))
+}
+```
+
+## Anagrafica
+
+### Analisi delle variabili
+
+Visualizziamo il dataset
+```{r}
+View(anagrafica_unique)
+```
+
+Evidenziamo i valori nulli per ogni variabile
+```{r}
+colSums(is.na(anagrafica_unique))
+```
+
+Tra le variabili territoriali (Provincia, SiglaProvincia, Comune e Regione) vogliamo mantenere
+soltanto la variabile Regione poiché:
+* le variabile prese in considerazione hanno una struttura gerarchica quindi ci restituiscono informazioni ridondanti; 
+* numerosità delle categorie (ci sono 20 regioni contro più di 100 province e più di 7000 comuni);
+* presenza di pochi valori nulli.
+
+Poiché abbiamo una differenza di 20 valori tra Provincia e Regione siamo interessati a vedere se possiamo 
+derivare questi valori quindi analazziamo i valori unici tra le province
+```{r}
+unique(anagrafica_unique$Provincia)
+```
+Come si può vedere sono stati commessi errori di compilazione quindi risulterebbe impossibile ricavare la corrispondente regione.
+
+Decidiamo di aggregare i valori nulli per le regioni creando una nuova categoria: "REGIONE NON SPECIFICATA"
+```{r}
+anagrafica_unique$Regione[is.na(anagrafica_unique$Regione)] <- "REGIONE NON SPECIFICATA"
+```
+
+Eliminiamo provincia, sigla provincia e comune
+```{r}
+anagrafica_unique[,c("Provincia","SiglaProvincia", "Comune")] <- NULL
+```
+
+Consideriamo adesso le variabili temporali: DtaPresuntoParto, ETA_MM_BambinoTODAY, ETA_MM_BambinoREG
+```{r}
+print(length(anagrafica_unique[is.na(anagrafica_unique$DtaPresuntoParto) != is.na(anagrafica_unique$ETA_MM_BambinoTODAY)]))
+```
+I valori nulli in DtaPresuntoParto e ETA_MM_BambinoTODAY, oltre ad essere in numero uguale(2866), coincidono. ETA_MM_BambinoREG e ETA_MM_BambinoTODAY presentano un numero di valori nulli diversi (rispettivamente 2868 e 2866).
+Evidenziamo i casi in cui uno solo dei due valori è nullo, trattandoli separatamente
+```{r}
+anagrafica_incompleta <- anagrafica_unique[is.na(anagrafica_unique$ETA_MM_BambinoREG) != is.na(anagrafica_unique$ETA_MM_BambinoTODAY),]
+View(anagrafica_incompleta)
+```
+
+ETA_MM_BambinoREG è derivabile dagli altri dati presenti, in quanto pari alla differenza tra DtaRegUserData e DtaPresuntoParto
+```{r}
+suppressWarnings(
+for (index in as.numeric(rownames(anagrafica_incompleta)) ) {
+  eta_calcolata = as.numeric(difftime(anagrafica_unique$DtaPresuntoParto[index],
+                                      anagrafica_unique$DtaRegUserData[index], "days"))%/% 30
+  if(anagrafica_unique$DtaPresuntoParto[index] >anagrafica_unique$DtaRegUserData[index])
+    {eta_calcolata=-eta_calcolata}
+  print(eta_calcolata)
+  anagrafica_unique$ETA_MM_BambinoREG[index] = eta_calcolata
+}
+)
+```
+DtaRegUserData e DtaPresuntoParto sono derivabili da ETA_MM_BambinoREG e ETA_MM_BambinoTODAY, decidiamo di tenere soltanto queste ultime due variabili
+```{r}
+anagrafica_unique[,c("DtaRegUserData","DtaPresuntoParto")] <- NULL
+```
+
+Infine possiamo resettare gli indici di riga del nostro dataset utilizzando l'id player
+```{r}
+rownames(anagrafica_unique) <- anagrafica_unique$id_player
+anagrafica_unique[,c("id_player")] <- NULL
+View(anagrafica_unique)
+```
+
+### Grafici
+# Ancora da fare
+## Accessi app
+## Prodotti Caricati
+
+### Analisi delle variabili
+
+Visualizziamo il dataset
+```{r}
+View(prodotti_caricati_unique)
+```
+
+Evidenziamo i valori nulli per ogni variabile
+```{r}
+colSums(is.na(prodotti_caricati_unique))
+```
+```{r}
+View(missioni_players_unique)
+View(premi_mamme_unique)
+```
+
+## Conversione EAN prodotto
+
+### Analisi delle variabili
+
+Visualizziamo il dataset
+```{r}
+View(conversione_ean_prodotto_unique)
+```
+
+Evidenziamo i valori nulli per ogni variabile
+```{r}
+colSums(is.na(conversione_ean_prodotto_unique))
+```
+## Premi mamme
+
+## Missioni players
